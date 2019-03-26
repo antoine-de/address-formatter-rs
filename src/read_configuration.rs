@@ -66,7 +66,6 @@ pub fn read_configuration() -> Formatter {
                 .map(|c| (c, v))
         })
         .filter_map(|(country_code, v)| {
-            println!(" country code: {:?}", country_code);
             if let Some(parent_country) = v["use_country"]
                 .as_str()
                 .and_then(|k| CountryCode::from_str(k).ok())
@@ -112,9 +111,9 @@ pub fn read_configuration() -> Formatter {
         fallback_template,
         templates_by_country,
     };
-    println!("components: {:?}", &components);
-    println!("aliases: {:?}", &component_aliases);
-    println!("templates: {:?}", &templates);
+    // println!("nb components: {}", &components.len());
+    // println!("nb aliases: {}", &component_aliases.len());
+    println!("nb templates: {}", &templates.templates_by_country.len());
     Formatter {
         components,
         component_aliases,

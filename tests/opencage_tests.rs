@@ -19,7 +19,7 @@ pub fn basic_test() {
     };
 
     assert_eq!(
-        formatter.format(&addr).unwrap(),
+        formatter.format(addr).unwrap(),
         r#"
 17 Rue du Médecin-Colonel Calbairac
 31000 Toulouse

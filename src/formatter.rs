@@ -1,4 +1,5 @@
 use crate::Address;
+use failure::Fail;
 use failure::{format_err, Error};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -7,7 +8,7 @@ use std::str::FromStr;
 pub(crate) struct Replace(String, String);
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
-pub(crate) struct CountryCode(String); // TODO small string
+pub struct CountryCode(String); // TODO small string
 
 impl FromStr for CountryCode {
     type Err = Error;
@@ -78,14 +79,34 @@ impl Formatter {
         crate::read_configuration::read_configuration()
     }
 
-    pub fn format(&self, addr: &Address) -> Result<String, Error> {
-        let country_code = self.find_country_code(addr, Configuration::default());
-        unimplemented!()
+    pub fn format(&self, mut addr: Address) -> Result<String, Error> {
+        self.format_with_config(addr, Configuration::default())
     }
 
-    pub fn format_with_config(&self, addr: &Address, conf: Configuration) -> Result<String, Error> {
-        let country_code = self.find_country_code(addr, conf);
-        unimplemented!()
+    pub fn format_with_config(
+        &self,
+        mut addr: Address,
+        conf: Configuration,
+    ) -> Result<String, Error> {
+        let country_code = self.find_country_code(&addr, conf);
+
+        self.alias_fields(&mut addr);
+
+        sanity_clean_address(&mut addr);
+
+        let template = self.find_template(&addr, country_code);
+
+        let template_engine = crate::handlebar_helper::new_template_engine();
+
+        println!("template {}", &template.address_template);
+
+        let mut text = template_engine
+            .render_template(&template.address_template, &addr)
+            .map_err(|e| e.context("impossible to render template"))?;
+
+        println!("text == {}", &text);
+
+        Ok(text)
     }
 
     /// make an international one line label for the address
@@ -98,7 +119,87 @@ impl Formatter {
     //     unimplemented!
     // }
 
-    fn find_country_code(&self, addr: &Address, conf: Configuration) -> Option<String> {
-        unimplemented!()
+    fn find_country_code(&self, addr: &Address, conf: Configuration) -> Option<CountryCode> {
+        conf.country_code
+            .or(addr.country_code.clone())
+            .and_then(|s| {
+                CountryCode::from_str(&s)
+                    .map_err(|e| log::info!("impossible to find a country: {}", e))
+                    .ok()
+            })
     }
+
+    fn alias_fields(&self, addr: &mut Address) {
+        // TODO use the aliases
+        /*
+
+        foreach ($this->componentAliases as $key => $val) {
+            if (isset($addressArray[$key]) && !isset($addressArray[$val])) {
+                $addressArray[$val] = $addressArray[$key];
+            }
+        }
+
+        */
+    }
+
+    fn find_template<'a>(
+        &'a self,
+        addr: &Address,
+        country_code: Option<CountryCode>,
+    ) -> &'a Template {
+        country_code
+            .and_then(|c| {
+                if !has_minimum_address_components(addr) {
+                    Some(&self.templates.fallback_template)
+                } else {
+                    self.templates.templates_by_country.get(&c)
+                }
+            })
+            .unwrap_or(&self.templates.default_template)
+    }
+}
+
+fn sanity_clean_address(addr: &mut Address) {
+    //TODO cleanup data
+    /*
+        if (isset($addressArray['postcode'])) {
+            if (strlen($addressArray['postcode']) > 20) {
+                unset($addressArray['postcode']);
+            } elseif (preg_match('/\d+;\d+/', $addressArray['postcode']) > 0) {
+                // Sometimes OSM has postcode ranges
+                unset($addressArray['postcode']);
+            } elseif (preg_match('/^(\d{5}),\d{5}/', $addressArray['postcode'], $matches) > 0) {
+                // Use the first postcode from the range
+                $addressArray['postcode'] = $matches[1];
+            }
+        }
+        //Try and catch values containing URLs
+        foreach ($addressArray as $key => $val) {
+            if (preg_match('|https?://|', $val) > 0) {
+                unset($addressArray[$key]);
+            }
+        }
+
+
+
+    /**
+     * Hacks for bad country data
+     */
+    if (isset($addressArray['country'])) {
+    if (isset($addressArray['state'])) {
+    /**
+                 * If the country is a number, use the state as country
+                 */
+                if (is_numeric($addressArray['country'])) {
+                    $addressArray['country'] = $addressArray['state'];
+                    unset($addressArray['state']);
+                }
+            }
+        }
+    */
+}
+
+fn has_minimum_address_components(addr: &Address) -> bool {
+    //TODO
+    true
 }

@@ -1,4 +1,6 @@
-#[derive(Default, Debug, Eq, PartialEq)]
+use serde::Serialize;
+
+#[derive(Default, Debug, Eq, PartialEq, Serialize)]
 pub struct Address {
     pub attention: Option<String>,
     pub house_number: Option<String>,
