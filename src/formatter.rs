@@ -1,15 +1,13 @@
 use crate::Address;
 use failure::{format_err, Error};
-use include_dir::{include_dir, include_dir_impl, Dir};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
 
 #[derive(Debug, Clone)]
-struct Replace(String, String);
+pub(crate) struct Replace(String, String);
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
-struct CountryCode(String); // TODO small string
+pub(crate) struct CountryCode(String); // TODO small string
 
 impl FromStr for CountryCode {
     type Err = Error;
@@ -31,9 +29,9 @@ impl FromStr for CountryCode {
 }
 
 #[derive(Debug, Default, Clone)]
-struct NewComponent {
-component: String,
-new_value: String,
+pub(crate) struct NewComponent {
+    pub component: String,
+    pub new_value: String,
 }
 
 impl std::fmt::Display for CountryCode {
@@ -43,25 +41,25 @@ impl std::fmt::Display for CountryCode {
 }
 
 #[derive(Debug, Default, Clone)]
-struct Template {
-    address_template: String,
-    replace: Vec<Replace>,
-    postformat_replace: Vec<Replace>,
-    change_country: Option<String>,
-    add_component: Option<NewComponent>,
+pub(crate) struct Template {
+    pub address_template: String,
+    pub replace: Vec<Replace>,
+    pub postformat_replace: Vec<Replace>,
+    pub change_country: Option<String>,
+    pub add_component: Option<NewComponent>,
 }
 
 #[derive(Debug)]
-struct Templates {
-    default_template: Template,
-    fallback_template: Template,
-    templates_by_country: HashMap<CountryCode, Template>,
+pub(crate) struct Templates {
+    pub default_template: Template,
+    pub fallback_template: Template,
+    pub templates_by_country: HashMap<CountryCode, Template>,
 }
 
 pub struct Formatter {
-    components: Vec<String>,
-    component_aliases: HashMap<String, String>,
-    templates: Templates,
+    pub(crate) components: Vec<String>,
+    pub(crate) component_aliases: HashMap<String, String>,
+    pub(crate) templates: Templates,
     // state_codes: Vec<>,
     // country_to_lang: Vec<>,
     // county_codes: Vec<>,
@@ -77,119 +75,7 @@ pub struct Configuration {
 
 impl Formatter {
     pub fn default() -> Self {
-        // read all the opencage configuration
-        // let opencage_dir = include_dir!("./address-formatting/conf");
-        let component_file = include_str!("../address-formatting/conf/components.yaml");
-        let templates_file = include_str!("../address-formatting/conf/countries/worldwide.yaml");
-        let raw_components = yaml_rust::YamlLoader::load_from_str(component_file)
-            .expect("impossible to read components.yaml file");
-
-        let components = raw_components
-            .iter()
-            .map(|v| {
-                v["name"]
-                    .clone()
-                    .into_string()
-                    .expect("no name for component")
-            })
-            .collect();
-
-        let mut component_aliases = HashMap::<String, String>::new();
-        for c in &raw_components {
-            if let Some(aliases) = c["aliases"].as_vec() {
-                for a in aliases {
-                    component_aliases.insert(
-                        a.as_str().unwrap().to_string(),
-                        c["name"].as_str().unwrap().to_string(),
-                    );
-                }
-            }
-        }
-
-        let raw_templates = yaml_rust::YamlLoader::load_from_str(templates_file)
-            .expect("impossible to read worldwide.yaml file");
-
-        let default_template = raw_templates[0]["default"]["address_template"]
-            .as_str()
-            .map(|t| Template {
-                address_template: t.to_string(),
-                ..Default::default()
-            })
-            .expect("no default address_template provided");
-        let fallback_template = raw_templates[0]["default"]["fallback_template"]
-            .as_str()
-            .map(|t| Template {
-                address_template: t.to_string(),
-                ..Default::default()
-            })
-            .expect("no default address_template provided");
-
-        // some countries uses the same rules as other countries (with some slight changes)
-        // they are marked as `use_country: another_country_code`
-        // we store them separatly first, to be able to create fully built templates
-        let mut overrided_countries = HashMap::new();
-
-        let mut templates_by_country: HashMap<CountryCode, Template> = raw_templates[0]
-            .clone()
-            .into_hash()
-            .unwrap()
-            .into_iter()
-            .filter_map(|(k, v)| {
-                k.as_str()
-                    .and_then(|k| CountryCode::from_str(k).ok())
-                    .map(|c| (c, v))
-            })
-            .filter_map(|(country_code, v)| {
-                println!(" country code: {:?}", country_code);
-                if let Some(parent_country) = v["use_country"].as_str().and_then(|k| CountryCode::from_str(k).ok()) {
-                    // we store it for later processing
-                    overrided_countries.insert(country_code, (parent_country, v.clone()));
-                    None
-                } else {
-                    let template = Template {
-                        address_template: v["address_template"]
-                            .as_str()
-                            .expect(&format!(
-                                "no address_template found for country {}",
-                                country_code
-                            ))
-                            .to_string(),
-                        //TODO replace & postformat
-                        ..Default::default()
-                    };
-                    Some((country_code, template))
-                }
-            })
-            .collect();
-
-        for (country_code, (parent_country_code, template)) in overrided_countries.into_iter() {
-            let mut overrided_template = templates_by_country[&parent_country_code].clone();
-
-            overrided_template.change_country = template["change_country"].as_str().map(|s| s.to_string());
-            if let Some(add_component) = template["add_component"].as_str() {
-                let part: Vec<_> = add_component.split("=").collect();
-                assert_eq!(part.len(), 2);
-                overrided_template.add_component = Some(NewComponent {
-                    component: part[0].to_owned(),
-                    new_value: part[1].to_owned()
-                })
-            }
-            templates_by_country.insert(country_code, overrided_template);
-        }
-
-        let templates = Templates {
-            default_template,
-            fallback_template,
-            templates_by_country,
-        };
-        println!("components: {:?}", &components);
-        println!("aliases: {:?}", &component_aliases);
-        println!("templates: {:?}", &templates);
-        Self {
-            components,
-            component_aliases,
-            templates,
-        }
+        crate::read_configuration::read_configuration()
     }
 
     pub fn format(&self, addr: &Address) -> Result<String, Error> {
