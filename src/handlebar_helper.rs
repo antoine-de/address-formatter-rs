@@ -20,7 +20,7 @@ impl HelperDef for FirstNonNullHelper {
             .template()
             .ok_or(RenderError::new("no values in first helper"))?;
 
-        let rendered_text = tpl.renders(r, ctx, rc).expect("pouuuuet");
+        let rendered_text = tpl.renders(r, ctx, rc)?;
 
         let value = rendered_text
             .split(" || ")

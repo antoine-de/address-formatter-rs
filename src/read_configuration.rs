@@ -1,4 +1,4 @@
-use crate::formatter::{CountryCode, Formatter, NewComponent, Replace, Template, Templates};
+use crate::formatter::{CountryCode, Formatter, NewComponent, Template, Templates};
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -111,9 +111,6 @@ pub fn read_configuration() -> Formatter {
         fallback_template,
         templates_by_country,
     };
-    // println!("nb components: {}", &components.len());
-    // println!("nb aliases: {}", &component_aliases.len());
-    println!("nb templates: {}", &templates.templates_by_country.len());
     Formatter {
         components,
         component_aliases,

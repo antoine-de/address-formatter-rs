@@ -29,12 +29,6 @@ impl FromStr for CountryCode {
     }
 }
 
-#[derive(Debug, Default, Clone)]
-pub(crate) struct NewComponent {
-    pub component: String,
-    pub new_value: String,
-}
-
 impl std::fmt::Display for CountryCode {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -42,11 +36,20 @@ impl std::fmt::Display for CountryCode {
 }
 
 #[derive(Debug, Default, Clone)]
+pub(crate) struct NewComponent {
+    pub component: String,
+    pub new_value: String,
+}
+
+/// The template represent the rules to apply to a `Address` to format it
+#[derive(Debug, Default, Clone)]
 pub(crate) struct Template {
     pub address_template: String,
+    /// Moustache template
     pub replace: Vec<Replace>,
     pub postformat_replace: Vec<Replace>,
     pub change_country: Option<String>,
+    /// Override the country
     pub add_component: Option<NewComponent>,
 }
 
@@ -79,7 +82,8 @@ impl Formatter {
         crate::read_configuration::read_configuration()
     }
 
-    pub fn format(&self, mut addr: Address) -> Result<String, Error> {
+    // TODO take an Into<Address> as parameter ?
+    pub fn format(&self, addr: Address) -> Result<String, Error> {
         self.format_with_config(addr, Configuration::default())
     }
 
@@ -100,7 +104,7 @@ impl Formatter {
 
         println!("template {}", &template.address_template);
 
-        let mut text = template_engine
+        let text = template_engine
             .render_template(&template.address_template, &addr)
             .map_err(|e| e.context("impossible to render template"))?;
 
@@ -130,7 +134,7 @@ impl Formatter {
             })
     }
 
-    fn alias_fields(&self, addr: &mut Address) {
+    fn alias_fields(&self, _addr: &mut Address) {
         // TODO use the aliases
         /*
 
@@ -160,7 +164,7 @@ impl Formatter {
     }
 }
 
-fn sanity_clean_address(addr: &mut Address) {
+fn sanity_clean_address(_addr: &mut Address) {
     //TODO cleanup data
     /*
         if (isset($addressArray['postcode'])) {
@@ -200,7 +204,7 @@ fn sanity_clean_address(addr: &mut Address) {
     */
 }
 
-fn has_minimum_address_components(addr: &Address) -> bool {
+fn has_minimum_address_components(_addr: &Address) -> bool {
     //TODO
     true
 }
@@ -238,6 +242,8 @@ fn cleanup_rendered(text: &str) -> String {
     }
 
     // we also dedup the string
+    // we dedup all the same 'token' in a line
+    // and all the same lines too
     let mut res = res
         .split("\n")
         .map(|s| s.split(", ").dedup().join(", "))
