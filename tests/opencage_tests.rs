@@ -20,31 +20,9 @@ pub fn basic_test() {
 
     assert_eq!(
         formatter.format(addr).unwrap(),
-        r#"
-17 Rue du Médecin-Colonel Calbairac
+        r#"17 Rue du Médecin-Colonel Calbairac
 31000 Toulouse
 France"#
             .to_owned()
     )
-}
-
-#[test]
-pub fn yaml_test() {
-    use yaml_rust::{YamlEmitter, YamlLoader};
-    let s = "
-name: house_number
-aliases:
-    - street_number
----
-name: house
-aliases:
-    - building
-";
-    let docs = YamlLoader::load_from_str(s).unwrap();
-
-    // Multi document support, doc is a yaml::Yaml
-    let doc = &docs;
-
-    // Debug support
-    println!("{:?}", doc);
 }

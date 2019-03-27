@@ -104,6 +104,7 @@ impl Formatter {
             .render_template(&template.address_template, &addr)
             .map_err(|e| e.context("impossible to render template"))?;
 
+        let text = cleanup_rendered(&text);
         println!("text == {}", &text);
 
         Ok(text)
@@ -202,4 +203,52 @@ fn sanity_clean_address(addr: &mut Address) {
 fn has_minimum_address_components(addr: &Address) -> bool {
     //TODO
     true
+}
+
+fn cleanup_rendered(text: &str) -> String {
+    use itertools::Itertools;
+    use regex::Regex;
+    lazy_static::lazy_static! {
+        static ref REPLACEMENTS:  [(Regex, &'static str); 12]= [
+            (Regex::new(r#"[},\s]+$"#).unwrap(), ""),
+            (Regex::new(r#"^[,\s]+"#).unwrap(), ""),
+            (Regex::new(r#"^- "#).unwrap(), ""), // line starting with dash due to a parameter missing
+            (Regex::new(r#",\s*,"#).unwrap(), ", "), //multiple commas to one
+            (Regex::new(r#"[\t\p{Zs}]+,[\t\p{Zs}]+"#).unwrap(), ", "), //one horiz whitespace behind comma
+            (Regex::new(r#"[\t\p{Zs}][\t\p{Zs}]+"#).unwrap(), " "), //multiple horiz whitespace to one
+            (Regex::new(r#"[\t\p{Zs}]\n"#).unwrap(), "\n"), //horiz whitespace, newline to newline
+            (Regex::new(r#"\n,"#).unwrap(), "\n"), //newline comma to just newline
+            (Regex::new(r#",,+"#).unwrap(), ","), //multiple commas to one
+            (Regex::new(r#",\n"#).unwrap(), "\n"), //comma newline to just newline
+            (Regex::new(r#"\n[\t\p{Zs}]+"#).unwrap(), "\n"), //newline plus space to newline
+            (Regex::new(r#"\n\n+"#).unwrap(), "\n"), //multiple newline to one
+        ];
+
+        static ref FINAL_CLEANUP:  [(Regex, &'static str); 2]= [
+            (Regex::new(r#"^\s+"#).unwrap(), ""), //remove leading whitespace
+            (Regex::new(r#"\s+$"#).unwrap(), ""), //remove end whitespace
+        ];
+    }
+
+    // TODO, better handle the Cow for performance ?
+    let mut res = text.to_owned();
+
+    for (rgx, new_val) in REPLACEMENTS.iter() {
+        res = rgx.replace_all(&res, *new_val).to_string();
+    }
+
+    // we also dedup the string
+    let mut res = res
+        .split("\n")
+        .map(|s| s.split(", ").dedup().join(", "))
+        .dedup()
+        .join("\n");
+
+    for (rgx, new_val) in FINAL_CLEANUP.iter() {
+        res = rgx.replace(&res, *new_val).to_string();
+    }
+
+    // res = res + "\n"; //add final newline
+
+    res.trim().to_owned()
 }

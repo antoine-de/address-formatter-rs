@@ -1,6 +1,6 @@
 use handlebars::{
-    Context, Handlebars, Helper, HelperDef, HelperResult, JsonRender, Output, RenderContext,
-    RenderError, Renderable, StringWriter,
+    Context, Handlebars, Helper, HelperDef, HelperResult, Output, RenderContext, RenderError,
+    Renderable,
 };
 
 ///Custom helper that gives the first non null value of a ` || ` separated list
