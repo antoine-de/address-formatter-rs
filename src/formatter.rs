@@ -102,14 +102,11 @@ impl Formatter {
 
         let template_engine = crate::handlebar_helper::new_template_engine();
 
-        println!("template {}", &template.address_template);
-
         let text = template_engine
             .render_template(&template.address_template, &addr)
             .map_err(|e| e.context("impossible to render template"))?;
 
         let text = cleanup_rendered(&text);
-        println!("text == {}", &text);
 
         Ok(text)
     }
@@ -254,7 +251,6 @@ fn cleanup_rendered(text: &str) -> String {
         res = rgx.replace(&res, *new_val).to_string();
     }
 
-    // res = res + "\n"; //add final newline
-
-    res.trim().to_owned()
+    let res = res.trim();
+    format!("{}\n", res) //add final newline
 }
