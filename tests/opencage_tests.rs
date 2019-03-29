@@ -54,6 +54,7 @@ fn run_test(yaml: Yaml, file_name: &str, formatter: &Formatter) -> Result<(), Er
         yaml["components"]
             .as_hash()
             .ok_or(format_err!("no component value provided {}", file_name))?,
+        &formatter,
     )?;
 
     let formated_value = formatter.format(addr)?;
@@ -86,31 +87,18 @@ got:
 
 // unfortunalty, at the time of writing, serde_yaml does not handle multiple documents in a yaml,
 // so we have to parse the parse manually
-fn read_addr(component: &linked_hash_map::LinkedHashMap<Yaml, Yaml>) -> Result<Address, Error> {
-    let get = |component: &linked_hash_map::LinkedHashMap<Yaml, Yaml>, field| {
-        component.get(&Yaml::from_str(field)).and_then(|s| {
-            s.as_str()
-                .map(|s| s.to_string())
-                .or_else(|| s.as_i64().map(|s| s.to_string()))
-        })
-    };
-    Ok(Address {
-        attention: get(component, "attention"),
-        house_number: get(component, "house_number"),
-        house: get(component, "house"),
-        road: get(component, "road"),
-        village: get(component, "village"),
-        suburb: get(component, "suburb"),
-        city: get(component, "city"),
-        county: get(component, "county"),
-        postcode: get(component, "postcode"),
-        state_district: get(component, "state_district"),
-        state: get(component, "state"),
-        region: get(component, "region"),
-        island: get(component, "island"),
-        neighbourhood: get(component, "neighbourhood"),
-        country: get(component, "country"),
-        country_code: get(component, "country_code"),
-        continent: get(component, "continent"),
-    })
+fn read_addr(
+    component: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+    formatter: &Formatter,
+) -> Result<Address, Error> {
+    Ok(
+        formatter.build_address(component.iter().filter_map(|(k, v)| {
+            Some((
+                k.as_str()?,
+                v.as_str()
+                    .map(|s| s.to_string())
+                    .or_else(|| v.as_i64().map(|s| s.to_string()))?,
+            ))
+        })),
+    )
 }

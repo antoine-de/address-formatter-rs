@@ -1,4 +1,4 @@
-use crate::Address;
+use crate::{Address, Component};
 use failure::Fail;
 use failure::{format_err, Error};
 use std::collections::HashMap;
@@ -62,7 +62,7 @@ pub(crate) struct Templates {
 
 pub struct Formatter {
     pub(crate) components: Vec<String>,
-    pub(crate) component_aliases: HashMap<String, String>,
+    pub(crate) component_aliases: HashMap<String, Component>,
     pub(crate) templates: Templates,
     // state_codes: Vec<>,
     // country_to_lang: Vec<>,
@@ -94,8 +94,6 @@ impl Formatter {
     ) -> Result<String, Error> {
         let country_code = self.find_country_code(&addr, conf);
 
-        self.alias_fields(&mut addr);
-
         sanity_clean_address(&mut addr);
 
         let template = self.find_template(&addr, country_code);
@@ -123,25 +121,12 @@ impl Formatter {
 
     fn find_country_code(&self, addr: &Address, conf: Configuration) -> Option<CountryCode> {
         conf.country_code
-            .or(addr.country_code.clone())
+            .or(addr[Component::CountryCode].clone())
             .and_then(|s| {
                 CountryCode::from_str(&s)
                     .map_err(|e| log::info!("impossible to find a country: {}", e))
                     .ok()
             })
-    }
-
-    fn alias_fields(&self, _addr: &mut Address) {
-        // TODO use the aliases
-        /*
-
-        foreach ($this->componentAliases as $key => $val) {
-            if (isset($addressArray[$key]) && !isset($addressArray[$val])) {
-                $addressArray[$val] = $addressArray[$key];
-            }
-        }
-
-        */
     }
 
     fn find_template<'a>(
@@ -158,6 +143,23 @@ impl Formatter {
                 }
             })
             .unwrap_or(&self.templates.default_template)
+    }
+
+    pub fn build_address<'a>(
+        &self,
+        values: impl IntoIterator<Item = (&'a str, String)>,
+    ) -> Address {
+        //TODO move this outside the formatter ?
+        let mut address = Address::default();
+        for (k, v) in values.into_iter() {
+            let component = Component::from_str(k)
+                .ok()
+                .or_else(|| self.component_aliases.get(k).cloned());
+            if let Some(component) = component {
+                address[component] = Some(v);
+            }
+        }
+        address
     }
 }
 

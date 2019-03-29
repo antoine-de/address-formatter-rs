@@ -1,4 +1,5 @@
 use crate::formatter::{CountryCode, Formatter, NewComponent, Template, Templates};
+use crate::Component;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -20,13 +21,14 @@ pub fn read_configuration() -> Formatter {
         })
         .collect();
 
-    let mut component_aliases = HashMap::<String, String>::new();
+    let mut component_aliases = HashMap::<_, _>::new();
     for c in &raw_components {
         if let Some(aliases) = c["aliases"].as_vec() {
             for a in aliases {
+                let name = c["name"].as_str().unwrap();
                 component_aliases.insert(
                     a.as_str().unwrap().to_string(),
-                    c["name"].as_str().unwrap().to_string(),
+                    Component::from_str(name).expect(&format!("{} is not a valid component", name)),
                 );
             }
         }

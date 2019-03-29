@@ -25,7 +25,7 @@ impl HelperDef for FirstNonNullHelper {
         let value = rendered_text
             .split(" || ")
             .into_iter()
-            .filter(|v| !v.is_empty())
+            .filter(|v| !v.is_empty() && v != &" ")
             .next()
             .unwrap_or_else(|| "");
 
