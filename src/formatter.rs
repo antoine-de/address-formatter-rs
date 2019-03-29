@@ -3,9 +3,10 @@ use failure::Fail;
 use failure::{format_err, Error};
 use std::collections::HashMap;
 use std::str::FromStr;
+use strum::IntoEnumIterator;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Replace(String, String);
+pub(crate) struct Replace(pub regex::Regex, pub String);
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub struct CountryCode(String); // TODO small string
@@ -97,6 +98,8 @@ impl Formatter {
         sanity_clean_address(&mut addr);
 
         let template = self.find_template(&addr, country_code);
+
+        replace_before(&template, &mut addr);
 
         let template_engine = crate::handlebar_helper::new_template_engine();
 
@@ -255,4 +258,14 @@ fn cleanup_rendered(text: &str) -> String {
 
     let res = res.trim();
     format!("{}\n", res) //add final newline
+}
+
+fn replace_before(template: &Template, addr: &mut Address) {
+    for r in &template.replace {
+        for c in Component::iter() {
+            if let Some(v) = &addr[c] {
+                addr[c] = Some(r.0.replace(&v, r.1.as_str()).to_string());
+            }
+        }
+    }
 }

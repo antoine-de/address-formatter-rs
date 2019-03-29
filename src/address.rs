@@ -1,8 +1,8 @@
 use enum_map::{Enum, EnumMap};
 use serde::Serialize;
-use strum_macros::{Display, EnumString};
+use strum_macros::{Display, EnumIter, EnumString};
 
-#[derive(Enum, EnumString, Debug, Clone, Copy, Display)]
+#[derive(Enum, EnumString, Debug, Clone, EnumIter, Copy, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum Component {
     Attention,

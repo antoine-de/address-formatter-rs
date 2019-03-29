@@ -1,4 +1,4 @@
-use crate::formatter::{CountryCode, Formatter, NewComponent, Template, Templates};
+use crate::formatter::{CountryCode, Formatter, NewComponent, Replace, Template, Templates};
 use crate::Component;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -76,6 +76,23 @@ pub fn read_configuration() -> Formatter {
                 overrided_countries.insert(country_code, (parent_country, v.clone()));
                 None
             } else {
+                let replace_rules = v["replace"]
+                    .as_vec()
+                    .map(|v| {
+                        v.iter()
+                            .map(|r| {
+                                let r = r.as_vec().unwrap();
+                                //TODO handle component=regex
+                                assert_eq!(r.len(), 2);
+                                Replace(
+                                    regex::Regex::new(r[0].as_str().expect("invalid replace rule"))
+                                        .expect("invalid regex"),
+                                    r[1].as_str().expect("invalid replace rule").to_owned(),
+                                )
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_else(|| vec![]);
                 let template = Template {
                     address_template: v["address_template"]
                         .as_str()
@@ -84,6 +101,7 @@ pub fn read_configuration() -> Formatter {
                             country_code
                         ))
                         .to_string(),
+                    replace: replace_rules,
                     //TODO replace & postformat
                     ..Default::default()
                 };
