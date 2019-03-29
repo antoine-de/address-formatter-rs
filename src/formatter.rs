@@ -6,7 +6,18 @@ use std::str::FromStr;
 use strum::IntoEnumIterator;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Replace(pub regex::Regex, pub String);
+pub(crate) struct Replacement {
+    pub regex: regex::Regex,
+    pub replacement_value: String,
+}
+
+/// Replacement rule
+/// a Replacement can be on all fields, or only one of them
+#[derive(Debug, Clone)]
+pub(crate) enum ReplaceRule {
+    All(Replacement),
+    Component((Component, Replacement)),
+}
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub struct CountryCode(String); // TODO small string
@@ -47,8 +58,8 @@ pub(crate) struct NewComponent {
 pub(crate) struct Template {
     pub address_template: String,
     /// Moustache template
-    pub replace: Vec<Replace>,
-    pub postformat_replace: Vec<Replace>,
+    pub replace: Vec<ReplaceRule>,
+    pub postformat_replace: Vec<ReplaceRule>,
     pub change_country: Option<String>,
     /// Override the country
     pub add_component: Option<NewComponent>,
@@ -62,7 +73,7 @@ pub(crate) struct Templates {
 }
 
 pub struct Formatter {
-    pub(crate) components: Vec<String>,
+    pub(crate) components: Vec<String>, // TODO REMOVE ?
     pub(crate) component_aliases: HashMap<String, Component>,
     pub(crate) templates: Templates,
     // state_codes: Vec<>,
@@ -96,6 +107,7 @@ impl Formatter {
         let country_code = self.find_country_code(&addr, conf);
 
         sanity_clean_address(&mut addr);
+        dbg!(&addr);
 
         let template = self.find_template(&addr, country_code);
 
@@ -107,6 +119,7 @@ impl Formatter {
             .render_template(&template.address_template, &addr)
             .map_err(|e| e.context("impossible to render template"))?;
 
+        dbg!(&text);
         let text = cleanup_rendered(&text);
 
         Ok(text)
@@ -262,9 +275,28 @@ fn cleanup_rendered(text: &str) -> String {
 
 fn replace_before(template: &Template, addr: &mut Address) {
     for r in &template.replace {
-        for c in Component::iter() {
-            if let Some(v) = &addr[c] {
-                addr[c] = Some(r.0.replace(&v, r.1.as_str()).to_string());
+        match r {
+            ReplaceRule::All(replace_rule) => {
+                for c in Component::iter() {
+                    if let Some(v) = &addr[c] {
+                        addr[c] = Some(
+                            replace_rule
+                                .regex
+                                .replace(&v, replace_rule.replacement_value.as_str())
+                                .to_string(),
+                        );
+                    }
+                }
+            }
+            ReplaceRule::Component((c, replace_rule)) => {
+                if let Some(v) = &addr[*c] {
+                    addr[*c] = Some(
+                        replace_rule
+                            .regex
+                            .replace(&v, replace_rule.replacement_value.as_str())
+                            .to_string(),
+                    );
+                }
             }
         }
     }
