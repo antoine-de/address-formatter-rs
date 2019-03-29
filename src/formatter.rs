@@ -1,6 +1,8 @@
 use crate::{Address, Component};
 use failure::Fail;
 use failure::{format_err, Error};
+use itertools::Itertools;
+use regex::Regex;
 use std::collections::HashMap;
 use std::str::FromStr;
 use strum::IntoEnumIterator;
@@ -59,7 +61,7 @@ pub(crate) struct Template {
     pub address_template: String,
     /// Moustache template
     pub replace: Vec<ReplaceRule>,
-    pub postformat_replace: Vec<ReplaceRule>,
+    pub postformat_replace: Vec<Replacement>,
     pub change_country: Option<String>,
     /// Override the country
     pub add_component: Option<NewComponent>,
@@ -74,7 +76,7 @@ pub(crate) struct Templates {
 
 pub struct Formatter {
     pub(crate) components: Vec<String>, // TODO REMOVE ?
-    pub(crate) component_aliases: HashMap<String, Component>,
+    pub(crate) component_aliases: HashMap<Component, Vec<String>>,
     pub(crate) templates: Templates,
     // state_codes: Vec<>,
     // country_to_lang: Vec<>,
@@ -120,7 +122,7 @@ impl Formatter {
             .map_err(|e| e.context("impossible to render template"))?;
 
         dbg!(&text);
-        let text = cleanup_rendered(&text);
+        let text = cleanup_rendered(&text, &template);
 
         Ok(text)
     }
@@ -167,40 +169,69 @@ impl Formatter {
     ) -> Address {
         //TODO move this outside the formatter ?
         let mut address = Address::default();
+        let mut unknown = HashMap::<String, String>::new();
         for (k, v) in values.into_iter() {
-            let component = Component::from_str(k)
-                .ok()
-                .or_else(|| self.component_aliases.get(k).cloned());
+            let component = Component::from_str(k).ok();;
             if let Some(component) = component {
                 address[component] = Some(v);
+            } else {
+                unknown.insert(k.to_string(), v);
             }
+        }
+        // all the unknown fields are added in the 'Attention' field
+        if !unknown.is_empty() {
+            for (c, aliases) in &self.component_aliases {
+                // if the address's component has not been already set, we set it to it's first found alias
+                for alias in aliases {
+                    if let Some(a) = unknown.remove(alias) {
+                        if address[*c].is_none() {
+                            address[*c] = Some(a);
+                            break;
+                        }
+                    }
+                }
+            }
+            address[Component::Attention] = Some(unknown.values().into_iter().join(", "));
         }
         address
     }
 }
 
-fn sanity_clean_address(_addr: &mut Address) {
-    //TODO cleanup data
+fn sanity_clean_address(addr: &mut Address) {
+    lazy_static::lazy_static! {
+        static ref POST_CODE_RANGE:  Regex= Regex::new(r#"\d+;\d+"#).unwrap();
+        static ref MATCHABLE_POST_CODE_RANGE:  Regex= Regex::new(r#"^(\d{5}),\d{5}"#).unwrap();
+        static ref IS_URL:  Regex= Regex::new(r#"https?://"#).unwrap();
+
+    }
+    // cleanup the postcode
+    if let Some(post_code) = &addr[Component::Postcode] {
+        if post_code.len() > 20 {
+            addr[Component::Postcode] = None;
+        } else if POST_CODE_RANGE.is_match(post_code) {
+            addr[Component::Postcode] = None;
+        } else if let Some(r) = MATCHABLE_POST_CODE_RANGE
+            .captures(post_code)
+            .and_then(|r| r.get(1))
+            .map(|c| c.as_str())
+        {
+            addr[Component::Postcode] = Some(r.to_owned());
+        }
+    }
+
+    // clean values containing URLs
+    for c in Component::iter() {
+        if let Some(v) = &addr[c] {
+            if IS_URL.is_match(v) {
+                addr[Component::Postcode] = None;
+            }
+        }
+    }
     /*
-        if (isset($addressArray['postcode'])) {
-            if (strlen($addressArray['postcode']) > 20) {
-                unset($addressArray['postcode']);
-            } elseif (preg_match('/\d+;\d+/', $addressArray['postcode']) > 0) {
-                // Sometimes OSM has postcode ranges
-                unset($addressArray['postcode']);
-            } elseif (preg_match('/^(\d{5}),\d{5}/', $addressArray['postcode'], $matches) > 0) {
-                // Use the first postcode from the range
-                $addressArray['postcode'] = $matches[1];
-            }
-        }
-        //Try and catch values containing URLs
-        foreach ($addressArray as $key => $val) {
-            if (preg_match('|https?://|', $val) > 0) {
-                unset($addressArray[$key]);
-            }
-        }
 
+    if let (Some(country),Some( state)) = (addr[Component::Country], addr[Component::State]) {
 
+    }
 
     /**
      * Hacks for bad country data
@@ -219,14 +250,8 @@ fn sanity_clean_address(_addr: &mut Address) {
     */
 }
 
-fn has_minimum_address_components(_addr: &Address) -> bool {
-    //TODO
-    true
-}
-
-fn cleanup_rendered(text: &str) -> String {
+fn cleanup_rendered(text: &str, template: &Template) -> String {
     use itertools::Itertools;
-    use regex::Regex;
     lazy_static::lazy_static! {
         static ref REPLACEMENTS:  [(Regex, &'static str); 12]= [
             (Regex::new(r#"[},\s]+$"#).unwrap(), ""),
@@ -269,13 +294,31 @@ fn cleanup_rendered(text: &str) -> String {
         res = rgx.replace(&res, *new_val).to_string();
     }
 
+    for r in &template.postformat_replace {
+        res = r
+            .regex
+            .replace(&res, r.replacement_value.as_str())
+            .to_string();
+    }
+
     let res = res.trim();
     format!("{}\n", res) //add final newline
 }
 
+fn has_minimum_address_components(_addr: &Address) -> bool {
+    //TODO
+    true
+}
+
 fn replace_before(template: &Template, addr: &mut Address) {
     for r in &template.replace {
-        match r {
+        r.replace_fields(addr);
+    }
+}
+
+impl ReplaceRule {
+    fn replace_fields<'a>(&self, addr: &mut Address) {
+        match self {
             ReplaceRule::All(replace_rule) => {
                 for c in Component::iter() {
                     if let Some(v) = &addr[c] {

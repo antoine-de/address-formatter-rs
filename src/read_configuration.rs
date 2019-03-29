@@ -24,14 +24,17 @@ pub fn read_configuration() -> Formatter {
         .collect();
 
     let mut component_aliases = HashMap::<_, _>::new();
+
     for c in &raw_components {
         if let Some(aliases) = c["aliases"].as_vec() {
+            let name = c["name"].as_str().unwrap();
+            let component =
+                Component::from_str(name).expect(&format!("{} is not a valid component", name));
             for a in aliases {
-                let name = c["name"].as_str().unwrap();
-                component_aliases.insert(
-                    a.as_str().unwrap().to_string(),
-                    Component::from_str(name).expect(&format!("{} is not a valid component", name)),
-                );
+                component_aliases
+                    .entry(component)
+                    .or_insert_with(|| vec![])
+                    .push(a.as_str().unwrap().to_string());
             }
         }
     }
@@ -78,50 +81,15 @@ pub fn read_configuration() -> Formatter {
                 overrided_countries.insert(country_code, (parent_country, v.clone()));
                 None
             } else {
-                let replace_rules = v["replace"]
-                    .as_vec()
-                    .map(|v| {
-                        v.iter()
-                            .map(|r| {
-                                let r = r.as_vec().expect("replace should be a list");
-                                //TODO handle component=regex
-                                assert_eq!(r.len(), 2);
-
-                                let first_val = r[0].as_str().expect("invalid replace rule");
-                                if first_val.contains("=") {
-                                    // it's a replace on only one component
-                                    // the rules is written 'component=<string_to_replace'
-                                    let parts =
-                                        first_val.split("=").into_iter().collect::<Vec<_>>();
-                                    let component = Component::from_str(parts[0]).expect(&format!(
-                                        "in replace '{}' is not a valid component",
-                                        parts[0]
-                                    ));
-                                    ReplaceRule::Component((
-                                        component,
-                                        Replacement {
-                                            regex: regex::Regex::new(parts[1])
-                                                .expect("invalid regex"),
-                                            replacement_value: r[1]
-                                                .as_str()
-                                                .expect("invalid replace rule")
-                                                .to_owned(),
-                                        },
-                                    ))
-                                } else {
-                                    // it's a replace for all components
-                                    ReplaceRule::All(Replacement {
-                                        regex: regex::Regex::new(first_val).expect("invalid regex"),
-                                        replacement_value: r[1]
-                                            .as_str()
-                                            .expect("invalid replace rule")
-                                            .to_owned(),
-                                    })
-                                }
-                            })
-                            .collect()
+                let replace_rules = read_replace(&v["replace"]);
+                let post_format_replace_rules = read_replace(&v["postformat_replace"])
+                    .into_iter()
+                    .map(|r| match r {
+                        ReplaceRule::All(r) => r,
+                        _ => panic!("postformat rules cannot be applied only on one element"),
                     })
-                    .unwrap_or_else(|| vec![]);
+                    .collect();
+
                 let template = Template {
                     address_template: v["address_template"]
                         .as_str()
@@ -131,6 +99,7 @@ pub fn read_configuration() -> Formatter {
                         ))
                         .to_string(),
                     replace: replace_rules,
+                    postformat_replace: post_format_replace_rules,
                     //TODO replace & postformat
                     ..Default::default()
                 };
@@ -165,4 +134,49 @@ pub fn read_configuration() -> Formatter {
         component_aliases,
         templates,
     }
+}
+
+fn read_replace(yaml_rules: &yaml_rust::Yaml) -> Vec<ReplaceRule> {
+    yaml_rules
+        .as_vec()
+        .map(|v| {
+            v.iter()
+                .map(|r| {
+                    let r = r.as_vec().expect("replace should be a list");
+                    //TODO handle component=regex
+                    assert_eq!(r.len(), 2);
+
+                    let first_val = r[0].as_str().expect("invalid replace rule");
+                    if first_val.contains("=") {
+                        // it's a replace on only one component
+                        // the rules is written 'component=<string_to_replace'
+                        let parts = first_val.split("=").into_iter().collect::<Vec<_>>();
+                        let component = Component::from_str(parts[0]).expect(&format!(
+                            "in replace '{}' is not a valid component",
+                            parts[0]
+                        ));
+                        ReplaceRule::Component((
+                            component,
+                            Replacement {
+                                regex: regex::Regex::new(parts[1]).expect("invalid regex"),
+                                replacement_value: r[1]
+                                    .as_str()
+                                    .expect("invalid replace rule")
+                                    .to_owned(),
+                            },
+                        ))
+                    } else {
+                        // it's a replace for all components
+                        ReplaceRule::All(Replacement {
+                            regex: regex::Regex::new(first_val).expect("invalid regex"),
+                            replacement_value: r[1]
+                                .as_str()
+                                .expect("invalid replace rule")
+                                .to_owned(),
+                        })
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_else(|| vec![])
 }
